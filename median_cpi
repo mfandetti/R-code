@@ -1,0 +1,41 @@
+autocorr <- function(x){cor(x, lag(x, 1), use = "complete.obs")}
+
+
+
+  c("MEDCPIM158SFRBCLE", "CPIAUCSL", "CPILFESL") %>% 
+  tq_get(get = "economic.data", from = "1990-01-01") %>% 
+  pivot_wider(names_from = symbol, values_from = price) %>% 
+  set_colnames(c("date", "median", "headline", "xfe")) %>% 
+  mutate(median = ((1 + (median / 100))^(1/12)) - 1,
+         headline = (headline / lag(headline, 1)) - 1,
+         xfe = (xfe / lag(xfe, 1)) - 1,
+         median_autocorr = slide_dbl(median, .f = autocorr, .before = 59, .complete = T),
+         headline_autocorr = slide_dbl(headline, .f = autocorr, .before = 59, .complete = T),
+         xfe_autocorr = slide_dbl(xfe, .f = autocorr, .before = 59, .complete = T)) %>% 
+  #summarize(mean(headline_autocorr, na.rm = T), mean(xfe_autocorr, na.rm = T), mean(median_autocorr, na.rm = T))
+  select(date, 5:7) %>% 
+  drop_na %>% 
+  pivot_longer(-date) %>% 
+  ggplot(aes(x = date, y = value, color = name)) +
+  geom_line(aes(color = name), lineend = "round", linewidth = 2) +
+  scale_color_manual(values = c(headline_autocorr = "steelblue", 
+                                xfe_autocorr = "lightblue", 
+                                median_autocorr = "dodgerblue")) +
+  annotate("text", x = as.Date("2010-01-01"), y = -0.1, 
+           label = "Headline avg. autocorr. = 0.32\nMedian avg. autocorr. = 0.36\nXFE avg. autocorr. = 0.18",
+           family = "serif",
+           size = 5) +
+  theme +
+  theme(legend.position = c(.8, .8), 
+        legend.justification = c(.9, 0),
+        legend.background = element_rect(color = "white"),
+        legend.margin = margin(3, 3, 3, 3),
+        legend.key.size = unit(18, "pt"),
+        legend.title = element_blank(),
+        legend.text = element_text(family = "serif", size = 16)) +
+  labs(x = NULL, y = "autocorrelation coefficient",
+       title = "Sixty-mo. autocorrelation",
+       subtitle = "Headline, XFE, and median CPI, 1990-2024",
+       caption = "Source: FRED") +
+  scale_y_continuous(limits = c(-.5, 1)) +
+  scale_x_date(expand = c(0, 0))
